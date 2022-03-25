@@ -1,0 +1,26 @@
+@RuleTemplate = "MapClaims"
+@RuleName = "NameId"
+c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/primarysid"]
+ => issue(Type = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", Issuer = c.Issuer, OriginalIssuer = c.OriginalIssuer, Value = c.Value, ValueType = c.ValueType, Properties["http://schemas.xmlsoap.org/ws/2005/05/identity/claimproperties/format"] = "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent");
+
+@RuleTemplate = "LdapClaims"
+@RuleName = "RoleSessionName"
+c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/windowsaccountname", Issuer == "AD AUTHORITY"]
+ => issue(store = "Active Directory", types = ("https://aws.amazon.com/SAML/Attributes/RoleSessionName"), query = ";mail;{0}", param = c.Value);
+
+@RuleName = "Get AD Groups"
+c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/windowsaccountname", Issuer == "AD AUTHORITY"]
+ => add(store = "Active Directory", types = ("http://temp/variable"), query = ";tokenGroups;{0}", param = c.Value);
+
+@RuleName = "Get AWS Accounts from User attributes"
+c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/windowsaccountname"]
+ => add(store = "Active Directory", types = ("http://temp/AWSAccountsFromUser"), query = ";url;{0}", param = c.Value);
+
+@RuleName = "Dynamic ARN - Adding AWS Accounts"
+c:[Type == "http://temp/AWSAccountsFromUser"]
+ => add(Type = "http://temp/AWSAccountsFromUser2", Value = RegExReplace("arn:aws:iam::AWSACCOUNT:saml-provider/ADFS,arn:aws:iam::AWSACCOUNT:role/ADFS-", "AWSACCOUNT", c.Value));
+
+@RuleName = "Dynamic ARN - Adding Roles"
+c1:[Type == "http://temp/AWSAccountsFromUser2"]
+ && c2:[Type == "http://temp/variable", Value =~ "(?i)^AWS-"]
+ => issue(Type = "https://aws.amazon.com/SAML/Attributes/Role", Value = RegExReplace(c2.Value, "AWS-", c1.Value));
