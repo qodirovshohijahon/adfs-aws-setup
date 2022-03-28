@@ -2,15 +2,42 @@
 @RuleName = "NameId"
 c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/primarysid"]
  => issue(Type = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", Issuer = c.Issuer, OriginalIssuer = c.OriginalIssuer, Value = c.Value, ValueType = c.ValueType, Properties["http://schemas.xmlsoap.org/ws/2005/05/identity/claimproperties/format"] = "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent");
+###Description###
+NameId - A name identifier, represented by the NameID element in SAML 2.0, is generally used to identify 
+the subject of a SAML assertion. One reason for including an identifier is to enable the relying party to refer 
+to the subject later, such as in a query or a sign-out request. You will set this attribute of the Windows account name
+of the user as follows.
+
+Claim rule name: NameId
+Incoming claim type: Windows account name
+Outgoing claim type: Name ID
+Outgoing name ID format: Persistent Identifier
+Pass through all claim values: Select this option
+
 
 @RuleTemplate = "LdapClaims"
 @RuleName = "RoleSessionName"
 c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/windowsaccountname", Issuer == "AD AUTHORITY"]
  => issue(store = "Active Directory", types = ("https://aws.amazon.com/SAML/Attributes/RoleSessionName"), query = ";mail;{0}", param = c.Value);
+###Description###
+RoleSessionName
+You will use the email address of an authenticated user as the RoleSessionName. You can query Active Directory for this attribute
+as follows.
+
+Claim rule name: RoleSessionName
+Attribute store: Active Directory
+LDAP Attribute: E-Mail-Addresses
+Outgoing Claim Type: https://aws.amazon.com/SAML/Attributes/RoleSessionName 
+
 
 @RuleName = "Get AD Groups"
 c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/windowsaccountname", Issuer == "AD AUTHORITY"]
  => add(store = "Active Directory", types = ("http://temp/variable"), query = ";tokenGroups;{0}", param = c.Value);
+###Description###
+This custom rule uses a script in the claim rule language that retrieves all the groups the authenticated user is 
+a member of and places them into a temporary claim named http://temp/variable. 
+(Think of this as a variable you can access later.) I use this in the next rule to transform the groups into IAM role ARNs.
+
 
 @RuleName = "Get AWS Accounts from User attributes"
 c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/windowsaccountname"]
@@ -24,3 +51,12 @@ c:[Type == "http://temp/AWSAccountsFromUser"]
 c1:[Type == "http://temp/AWSAccountsFromUser2"]
  && c2:[Type == "http://temp/variable", Value =~ "(?i)^AWS-"]
  => issue(Type = "https://aws.amazon.com/SAML/Attributes/Role", Value = RegExReplace(c2.Value, "AWS-", c1.Value));
+
+
+
+ ### my rules
+
+ c:[Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/windowsaccountname", Issuer == "AD AUTHORITY"] => add(store = "Active Directory", types = ("http://temp/variable"), query = ";tokenGroups;{0}", param = c.Value);
+ c:[Type == "http://temp/variable", Value =~ "(?i)^AWS-"] => issue(Type = "https://aws.amazon.com/SAML/Attributes/Role", Value = RegExReplace(c.Value, "AWS-", "arn:aws:iam::123456789012:saml-provider/ADFS,arn:aws:iam::123456789012:role/ADFS-"));
+
+
